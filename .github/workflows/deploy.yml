@@ -44,7 +44,7 @@ jobs:
         run: |
           # 尝试获取已存在的 KV namespace
           KV_LIST=$(npx wrangler kv:namespace list 2>/dev/null || echo "[]")
-          KV_ID=$(echo "$KV_LIST" | jq -r '.[] | select(.title == "simplepaste-PASTE_KV") | .id' | head -1)
+          KV_ID=$(echo "$KV_LIST" | jq -r '.[] | select(.title == "cloudpaste-PASTE_KV") | .id' | head -1)
           
           if [ -z "$KV_ID" ] || [ "$KV_ID" = "null" ]; then
             echo "Creating new KV namespace..."

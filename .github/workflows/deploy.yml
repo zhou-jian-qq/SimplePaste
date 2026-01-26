@@ -65,45 +65,20 @@ jobs:
           sed -i 's/id = "your-kv-namespace-id"/id = "${{ steps.kv-id.outputs.KV_NAMESPACE_ID }}"/' wrangler.toml
           cat wrangler.toml
 
-      - name: Set Admin Password Secret
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          # 删除已存在的 secret（如果存在）
-          echo "Deleting existing ADMIN_PASSWORD secret if exists..."
-          npx wrangler secret delete ADMIN_PASSWORD --yes 2>/dev/null || echo "Secret does not exist or already deleted"
-          
-          # 等待删除操作完成
-          echo "Waiting for deletion to complete..."
-          sleep 5
-          
-          # 创建新的 secret，使用重试机制
-          echo "Creating new ADMIN_PASSWORD secret..."
-          MAX_RETRIES=3
-          RETRY_COUNT=0
-          
-          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-            if echo "${{ secrets.ADMIN_PASSWORD }}" | npx wrangler secret put ADMIN_PASSWORD; then
-              echo "✅ Secret ADMIN_PASSWORD set successfully"
-              exit 0
-            else
-              RETRY_COUNT=$((RETRY_COUNT + 1))
-              if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
-                echo "Retry $RETRY_COUNT/$MAX_RETRIES: Waiting before retry..."
-                sleep 3
-              else
-                echo "❌ Failed to set secret after $MAX_RETRIES attempts"
-                exit 1
-              fi
-            fi
-          done
-
       - name: Deploy to Cloudflare Workers
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Set Admin Password Secret
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          echo "Setting ADMIN_PASSWORD secret..."
+          echo "${{ secrets.ADMIN_PASSWORD }}" | npx wrangler secret put ADMIN_PASSWORD
+          echo "✅ Secret ADMIN_PASSWORD set successfully"
 
       - name: Add Custom Domain (if configured)
         if: env.CUSTOM_DOMAIN != ''

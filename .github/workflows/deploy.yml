@@ -1,0 +1,170 @@
+name: Deploy to Cloudflare
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    name: Deploy to Cloudflare Workers
+    env:
+      CUSTOM_DOMAIN: ${{ secrets.CUSTOM_DOMAIN }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Create KV Namespace
+        id: create-kv
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: kv:namespace list
+        continue-on-error: true
+
+      - name: Get or Create KV Namespace ID
+        id: kv-id
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          # 尝试获取已存在的 KV namespace
+          KV_LIST=$(npx wrangler kv:namespace list 2>/dev/null || echo "[]")
+          KV_ID=$(echo "$KV_LIST" | jq -r '.[] | select(.title == "simplepaste-PASTE_KV") | .id' | head -1)
+          
+          if [ -z "$KV_ID" ] || [ "$KV_ID" = "null" ]; then
+            echo "Creating new KV namespace..."
+            CREATE_OUTPUT=$(npx wrangler kv:namespace create PASTE_KV 2>&1)
+            KV_ID=$(echo "$CREATE_OUTPUT" | grep -oP 'id = "\K[^"]+' || echo "")
+          fi
+          
+          if [ -z "$KV_ID" ]; then
+            echo "Error: Could not get or create KV namespace"
+            exit 1
+          fi
+          
+          echo "KV_NAMESPACE_ID=$KV_ID" >> $GITHUB_OUTPUT
+          echo "Using KV namespace ID: $KV_ID"
+
+      - name: Update wrangler.toml with KV ID
+        run: |
+          sed -i 's/id = "your-kv-namespace-id"/id = "${{ steps.kv-id.outputs.KV_NAMESPACE_ID }}"/' wrangler.toml
+          cat wrangler.toml
+
+      - name: Deploy to Cloudflare Workers
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          secrets: |
+            ADMIN_PASSWORD
+        env:
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+
+      - name: Add Custom Domain (if configured)
+        if: env.CUSTOM_DOMAIN != ''
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CUSTOM_DOMAIN: ${{ secrets.CUSTOM_DOMAIN }}
+          WORKER_NAME: simplepaste
+        run: |
+          echo "🌐 Configuring custom domain: $CUSTOM_DOMAIN"
+          
+          # 从域名提取根域名（例如：simplepaste.example.com -> example.com）
+          ROOT_DOMAIN=$(echo "$CUSTOM_DOMAIN" | sed 's/^[^.]*\.//')
+          echo "Root domain: $ROOT_DOMAIN"
+          
+          # 获取域名的 Zone ID
+          echo "Fetching Zone ID for domain: $ROOT_DOMAIN"
+          ZONE_RESPONSE=$(curl -s -X GET \
+            "https://api.cloudflare.com/client/v4/zones?name=$ROOT_DOMAIN" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H "Content-Type: application/json")
+          
+          ZONE_ID=$(echo "$ZONE_RESPONSE" | grep -o '"id":"[^"]*"' | head -1 | grep -o '"[^"]*"$' | tr -d '"' || echo "")
+          
+          if [ -z "$ZONE_ID" ]; then
+            echo "❌ Error: Could not find Zone ID for domain $ROOT_DOMAIN"
+            echo "Response: $ZONE_RESPONSE"
+            echo ""
+            echo "Please ensure:"
+            echo "  1. Domain $ROOT_DOMAIN is added to your Cloudflare account"
+            echo "  2. Domain is active (not pending)"
+            echo ""
+            echo "Deployment will continue without custom domain..."
+            exit 0
+          fi
+          
+          echo "Found Zone ID: $ZONE_ID"
+          
+          # 检查域名是否已存在
+          echo "Checking if domain already exists..."
+          EXISTING_RESPONSE=$(curl -s -X GET \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/domains" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H "Content-Type: application/json")
+          
+          EXISTING_DOMAINS=$(echo "$EXISTING_RESPONSE" | grep -o '"hostname":"[^"]*"' | grep -o '[^"]*$' || echo "")
+          
+          if echo "$EXISTING_DOMAINS" | grep -q "^$CUSTOM_DOMAIN$"; then
+            echo "✅ Domain $CUSTOM_DOMAIN already configured, skipping..."
+          else
+            echo "Adding custom domain: $CUSTOM_DOMAIN"
+            # 使用正确的 API 端点和请求格式
+            RESPONSE=$(curl -s -w "\n%{http_code}" -X PUT \
+              "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/domains" \
+              -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "{\"hostname\":\"$CUSTOM_DOMAIN\",\"service\":\"$WORKER_NAME\",\"zone_id\":\"$ZONE_ID\",\"environment\":\"production\"}")
+            
+            HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+            BODY=$(echo "$RESPONSE" | sed '$d')
+            
+            if [ "$HTTP_CODE" -eq 200 ] || [ "$HTTP_CODE" -eq 201 ]; then
+              echo "✅ Successfully added custom domain: $CUSTOM_DOMAIN"
+              echo "Cloudflare will automatically create DNS records and SSL certificates."
+            else
+              echo "⚠️ Warning: Failed to add custom domain. HTTP Code: $HTTP_CODE"
+              echo "Response: $BODY"
+              echo ""
+              echo "Possible reasons:"
+              echo "  1. Domain is not added to your Cloudflare account"
+              echo "  2. Domain already has a CNAME record"
+              echo "  3. You don't have permission to modify this domain"
+              echo "  4. Domain format is incorrect"
+              echo ""
+              echo "You can manually add the domain in Cloudflare Dashboard:"
+              echo "  Workers & Pages → simplepaste → Settings → Triggers → Custom Domains"
+              echo ""
+              echo "Deployment will continue..."
+            fi
+          fi
+
+      - name: Deployment Summary
+        run: |
+          echo "## 🚀 Deployment Successful!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Your SimplePaste is now live at:" >> $GITHUB_STEP_SUMMARY
+          echo "\`https://simplepaste.${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.workers.dev\`" >> $GITHUB_STEP_SUMMARY
+          if [ -n "$CUSTOM_DOMAIN" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Custom Domain**: \`https://$CUSTOM_DOMAIN\`" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Homepage**: \`/\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Admin Panel**: \`/admin\`" >> $GITHUB_STEP_SUMMARY

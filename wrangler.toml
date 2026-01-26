@@ -1,0 +1,21 @@
+name = "simplepaste"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+# KV 命名空间绑定
+# 部署前需要创建 KV 命名空间：npx wrangler kv:namespace create PASTE_KV
+# 然后将生成的 id 填入下方
+[[kv_namespaces]]
+binding = "PASTE_KV"
+id = "your-kv-namespace-id"  # 部署时替换为实际的 KV namespace ID
+
+# 环境变量
+[vars]
+# 管理密码通过 secret 设置：npx wrangler secret put ADMIN_PASSWORD
+# 本地开发默认密码（仅用于开发环境）
+ADMIN_PASSWORD = "admin123"
+
+# 开发环境配置
+[dev]
+port = 8787
+local_protocol = "http"

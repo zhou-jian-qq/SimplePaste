@@ -168,12 +168,73 @@ export function getHomePage(): string {
     .error.show {
       display: block;
     }
+    .lookup-card {
+      margin-bottom: 20px;
+      padding: 20px 30px;
+    }
+    .lookup-section label {
+      display: block;
+      font-size: 0.9rem;
+      color: #d1d5db;
+      margin-bottom: 10px;
+      font-weight: 500;
+    }
+    .lookup-row {
+      display: flex;
+      gap: 10px;
+    }
+    .lookup-row input {
+      flex: 1;
+      text-align: center;
+      font-size: 1.2rem;
+      letter-spacing: 0.3em;
+      font-weight: 600;
+    }
+    .lookup-btn {
+      width: auto;
+      padding: 12px 24px;
+      white-space: nowrap;
+    }
+    .share-code-display {
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+      border-radius: 12px;
+      padding: 20px;
+      margin: 15px 0;
+    }
+    .share-code-label {
+      font-size: 0.85rem;
+      color: rgba(255, 255, 255, 0.8);
+      margin-bottom: 8px;
+    }
+    .share-code-value {
+      font-size: 2.5rem;
+      font-weight: 700;
+      letter-spacing: 0.3em;
+      color: #fff;
+      text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+      font-family: 'Courier New', monospace;
+    }
+    .share-url-display {
+      font-size: 0.85rem;
+      color: #9ca3af;
+      word-break: break-all;
+      margin-top: 10px;
+    }
     @media (max-width: 640px) {
       h1 {
         font-size: 2rem;
       }
       .row {
         grid-template-columns: 1fr;
+      }
+      .lookup-row {
+        flex-direction: column;
+      }
+      .lookup-btn {
+        width: 100%;
+      }
+      .share-code-value {
+        font-size: 2rem;
       }
     }
   </style>
@@ -184,6 +245,24 @@ export function getHomePage(): string {
       <h1>SimplePaste</h1>
       <p class="subtitle">轻量级文本分享工具</p>
     </header>
+
+    <!-- 分享码查询区域 -->
+    <div class="card lookup-card">
+      <div class="lookup-section">
+        <label for="codeInput">输入分享码查看内容</label>
+        <div class="lookup-row">
+          <input 
+            type="text" 
+            id="codeInput" 
+            placeholder="请输入6位分享码"
+            maxlength="6"
+            pattern="[0-9]*"
+            inputmode="numeric"
+          />
+          <button type="button" class="btn lookup-btn" onclick="goToShare()">查看</button>
+        </div>
+      </div>
+    </div>
 
     <div class="card">
       <div id="error" class="error"></div>
@@ -234,14 +313,20 @@ export function getHomePage(): string {
   <div id="successModal" class="modal">
     <div class="modal-content">
       <h2>分享创建成功！</h2>
-      <p id="shareUrl"></p>
-      <button class="btn btn-secondary" onclick="copyUrl()">复制链接</button>
+      <div class="share-code-display">
+        <div class="share-code-label">分享码</div>
+        <div class="share-code-value" id="shareCode"></div>
+      </div>
+      <p class="share-url-display" id="shareUrl"></p>
+      <button class="btn" onclick="copyCode()">复制分享码</button>
+      <button class="btn btn-secondary" onclick="copyUrl()">复制完整链接</button>
       <button class="btn btn-secondary" onclick="closeModal()">关闭</button>
     </div>
   </div>
 
   <script>
     let shareUrl = '';
+    let shareCodeValue = '';
 
     document.getElementById('pasteForm').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -281,6 +366,9 @@ export function getHomePage(): string {
         }
 
         shareUrl = data.data.url;
+        // 从 URL 中提取分享码
+        shareCodeValue = data.data.id || shareUrl.split('/').pop();
+        document.getElementById('shareCode').textContent = shareCodeValue;
         document.getElementById('shareUrl').textContent = shareUrl;
         document.getElementById('successModal').classList.add('show');
         
@@ -300,24 +388,60 @@ export function getHomePage(): string {
       errorDiv.classList.add('show');
     }
 
+    function copyCode() {
+      navigator.clipboard.writeText(shareCodeValue).then(() => {
+        closeModal();
+      }).catch(() => {
+        fallbackCopy(shareCodeValue);
+        closeModal();
+      });
+    }
+
     function copyUrl() {
       navigator.clipboard.writeText(shareUrl).then(() => {
         closeModal();
       }).catch(() => {
-        // 降级方案
-        const textarea = document.createElement('textarea');
-        textarea.value = shareUrl;
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textarea);
+        fallbackCopy(shareUrl);
         closeModal();
       });
+    }
+
+    function fallbackCopy(text) {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
     }
 
     function closeModal() {
       document.getElementById('successModal').classList.remove('show');
     }
+
+    function goToShare() {
+      const codeInput = document.getElementById('codeInput');
+      const code = codeInput.value.trim();
+      if (!code) {
+        codeInput.focus();
+        return;
+      }
+      if (!/^[0-9]+$/.test(code)) {
+        showError('分享码只能包含数字');
+        return;
+      }
+      window.location.href = '/' + code;
+    }
+
+    // 支持回车键提交分享码
+    document.getElementById('codeInput').addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        goToShare();
+      }
+    });
   </script>
 </body>
 </html>`;

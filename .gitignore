@@ -1,6 +1,6 @@
 # Dependencies
 node_modules/
-package-lock.json
+# package-lock.json 应该提交到 Git，用于确保依赖版本一致性
 yarn.lock
 pnpm-lock.yaml
 

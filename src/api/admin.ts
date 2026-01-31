@@ -7,6 +7,7 @@ import {
     errorResponse,
     getContentPreview,
 } from './utils';
+import { deleteFile } from './file';
 
 const KV_PREFIX = 'paste:';
 
@@ -79,15 +80,19 @@ export async function listPastes(
             const data = await env.PASTE_KV.get(key.name);
             if (data) {
                 const paste: PasteData = JSON.parse(data);
+                const isFile = paste.type === 'file';
                 items.push({
                     id: paste.id,
+                    type: paste.type || 'text',  // 兼容旧数据
                     lang: paste.lang,
                     hasPassword: paste.password !== null,
+                    rawPassword: paste.rawPassword || null,  // 返回原始密码
                     burnAfterRead: paste.burnAfterRead,
                     createdAt: paste.createdAt,
                     expiresAt: paste.expiresAt,
                     viewCount: paste.viewCount,
-                    contentPreview: getContentPreview(paste.content),
+                    contentPreview: isFile ? (paste.fileName || '未知文件') : getContentPreview(paste.content),
+                    fileSize: paste.fileSize,
                     creatorIp: paste.creatorIp,
                 });
             }
@@ -126,7 +131,14 @@ export async function deletePaste(
             return errorResponse('Paste not found', 404);
         }
 
-        // 删除
+        const paste: PasteData = JSON.parse(data);
+
+        // 如果是文件类型，同时删除 R2 中的文件
+        if (paste.type === 'file') {
+            await deleteFile(env, id);
+        }
+
+        // 删除 KV 中的元数据
         await env.PASTE_KV.delete(KV_PREFIX + id);
 
         return successResponse({ deleted: true, id });

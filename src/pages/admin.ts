@@ -166,6 +166,50 @@ export function getAdminPage(): string {
       background: rgba(239, 68, 68, 0.2);
       color: #fca5a5;
     }
+    .badge-file {
+      background: rgba(34, 197, 94, 0.2);
+      color: #86efac;
+    }
+    .badge-text {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+    .badge-password {
+      position: relative;
+      cursor: help;
+    }
+    .badge-password .tooltip {
+      visibility: hidden;
+      opacity: 0;
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1f2937;
+      color: #e5e5e5;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      white-space: nowrap;
+      z-index: 100;
+      margin-bottom: 5px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      transition: opacity 0.2s ease, visibility 0.2s ease;
+    }
+    .badge-password .tooltip::after {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      border-width: 5px;
+      border-style: solid;
+      border-color: #1f2937 transparent transparent transparent;
+    }
+    .badge-password:hover .tooltip {
+      visibility: visible;
+      opacity: 1;
+    }
     .loading {
       text-align: center;
       padding: 40px;
@@ -240,7 +284,8 @@ export function getAdminPage(): string {
               <thead>
                 <tr>
                   <th>ID</th>
-                  <th>内容预览</th>
+                  <th>类型</th>
+                  <th>内容/文件名</th>
                   <th>创建者 IP</th>
                   <th>创建时间</th>
                   <th>过期时间</th>
@@ -353,17 +398,24 @@ export function getAdminPage(): string {
           const expiresAt = item.expiresAt 
             ? new Date(item.expiresAt).toLocaleString('zh-CN')
             : '永久';
+          const isFile = item.type === 'file';
+          const typeLabel = isFile ? '文件' : '文本';
+          const typeBadgeClass = isFile ? 'badge-file' : 'badge-text';
+          const contentDisplay = isFile 
+            ? escapeHtml(item.contentPreview) + (item.fileSize ? ' (' + formatFileSize(item.fileSize) + ')' : '')
+            : escapeHtml(item.contentPreview);
           
           return \`
             <tr>
               <td><code><a href="/\${item.id}" style="color: #6366f1; text-decoration: none;" target="_blank">\${item.id}</a></code></td>
-              <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">\${escapeHtml(item.contentPreview)}</td>
+              <td><span class="badge \${typeBadgeClass}">\${typeLabel}</span></td>
+              <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">\${contentDisplay}</td>
               <td>\${item.creatorIp}</td>
               <td>\${createdAt}</td>
               <td>\${expiresAt}</td>
               <td>\${item.viewCount}</td>
               <td>
-                \${item.hasPassword ? '<span class="badge badge-password">密码</span>' : ''}
+                \${item.hasPassword ? '<span class="badge badge-password">密码' + (item.rawPassword ? '<span class="tooltip">' + escapeHtml(item.rawPassword) + '</span>' : '') + '</span>' : ''}
                 \${item.burnAfterRead ? '<span class="badge badge-burn">阅后即焚</span>' : ''}
               </td>
               <td>
@@ -415,6 +467,14 @@ export function getAdminPage(): string {
       const div = document.createElement('div');
       div.textContent = text;
       return div.innerHTML;
+    }
+
+    function formatFileSize(bytes) {
+      if (bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     }
   </script>
 </body>

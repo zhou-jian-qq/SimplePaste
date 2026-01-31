@@ -36,9 +36,11 @@ export async function createPaste(
 
         const pasteData: PasteData = {
             id,
+            type: 'text',
             content: body.content,
             lang: body.lang || 'plaintext',
             password: body.password ? await sha256(body.password) : null,
+            rawPassword: body.password || null,
             burnAfterRead: body.burnAfterRead || false,
             createdAt: now,
             expiresAt,

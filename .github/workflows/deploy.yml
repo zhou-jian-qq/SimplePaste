@@ -65,6 +65,23 @@ jobs:
           sed -i 's/id = "your-kv-namespace-id"/id = "${{ steps.kv-id.outputs.KV_NAMESPACE_ID }}"/' wrangler.toml
           cat wrangler.toml
 
+      - name: Create R2 Bucket
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          echo "Checking R2 bucket..."
+          # 尝试列出存储桶，检查是否已存在
+          BUCKET_LIST=$(npx wrangler r2 bucket list 2>/dev/null || echo "")
+          
+          if echo "$BUCKET_LIST" | grep -q "simplepaste-files"; then
+            echo "✅ R2 bucket 'simplepaste-files' already exists"
+          else
+            echo "Creating R2 bucket 'simplepaste-files'..."
+            npx wrangler r2 bucket create simplepaste-files || true
+            echo "✅ R2 bucket created"
+          fi
+
       - name: Deploy to Cloudflare Workers
         uses: cloudflare/wrangler-action@v3
         with:
@@ -173,3 +190,12 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Homepage**: \`/\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Admin Panel**: \`/admin\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### ⚠️ R2 生命周期规则配置" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "请在 Cloudflare Dashboard 中为 R2 存储桶 \`simplepaste-files\` 配置生命周期规则：" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "1. 进入 **R2** > **simplepaste-files** > **Settings** > **Object lifecycle rules**" >> $GITHUB_STEP_SUMMARY
+          echo "2. 添加规则：**Delete objects after 30 days**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "这将确保过期文件自动清理，节省存储空间。" >> $GITHUB_STEP_SUMMARY

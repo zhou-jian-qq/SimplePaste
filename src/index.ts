@@ -1,5 +1,6 @@
-import { Env } from './types';
+import { Env, PasteData } from './types';
 import { createPaste, getPaste, getRawPaste, checkPasteExists } from './api/paste';
+import { uploadFile, downloadFile, getFileInfo } from './api/file';
 import { adminLogin, listPastes, deletePaste } from './api/admin';
 import { errorResponse } from './api/utils';
 
@@ -49,9 +50,26 @@ async function handleApiRoute(
   path: string,
   method: string
 ): Promise<Response> {
-  // POST /api/paste - 创建分享
+  // POST /api/paste - 创建文本分享
   if (path === '/api/paste' && method === 'POST') {
     return await createPaste(request, env);
+  }
+
+  // POST /api/file - 上传文件
+  if (path === '/api/file' && method === 'POST') {
+    return await uploadFile(request, env);
+  }
+
+  // GET /api/file/:id - 下载文件
+  const fileDownloadMatch = path.match(/^\/api\/file\/([a-zA-Z0-9]+)$/);
+  if (fileDownloadMatch && method === 'GET') {
+    return await downloadFile(request, env, fileDownloadMatch[1]);
+  }
+
+  // GET /api/file/:id/info - 获取文件信息
+  const fileInfoMatch = path.match(/^\/api\/file\/([a-zA-Z0-9]+)\/info$/);
+  if (fileInfoMatch && method === 'GET') {
+    return await getFileInfo(request, env, fileInfoMatch[1]);
   }
 
   // GET /api/paste/:id - 获取分享
@@ -145,8 +163,12 @@ async function handlePageRoute(
         headers: { 'Content-Type': 'text/html; charset=utf-8' },
       });
     }
+
+    // 解析数据判断类型
+    const paste: PasteData = JSON.parse(data);
+    const isFile = paste.type === 'file';
     
-    return new Response(getViewPage(id), {
+    return new Response(getViewPage(id, isFile), {
       headers: { 'Content-Type': 'text/html; charset=utf-8' },
     });
   }

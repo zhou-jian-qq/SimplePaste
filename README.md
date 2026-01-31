@@ -1,13 +1,14 @@
 # SimplePaste
 
-一个基于 Cloudflare Workers + KV 的轻量级文本分享工具，**完全无外部依赖**，所有 CSS 和 JavaScript 均内联。
+一个基于 Cloudflare Workers + KV + R2 的轻量级文本/文件分享工具，**完全无外部依赖**，所有 CSS 和 JavaScript 均内联。
 
 ## ✨ 功能特性
 
 - ✅ **文本分享** - 支持纯文本分享
+- ✅ **文件分享** - 支持最大 25MB 文件上传和下载（使用 R2 存储）
 - ✅ **密码保护** - 可选设置访问密码
-- ✅ **阅后即焚** - 查看一次后自动删除
-- ✅ **过期时间** - 可设置 1 小时、1 天、7 天、30 天或永久
+- ✅ **阅后即焚** - 查看/下载一次后自动删除
+- ✅ **过期时间** - 文本可设置永久，文件最长 30 天
 - ✅ **管理后台** - 查看所有分享、删除管理
 - ✅ **完全免费** - 基于 Cloudflare 免费套餐
 - ✅ **无外部依赖** - 所有资源内联，完全离线可用
@@ -67,15 +68,25 @@
    ```
    将输出的 `id` 值复制到 `wrangler.toml` 文件中。
 
-5. **设置管理密码**
+5. **创建 R2 存储桶**
+   ```bash
+   npx wrangler r2 bucket create simplepaste-files
+   ```
+
+6. **设置管理密码**
    ```bash
    npx wrangler secret put ADMIN_PASSWORD
    ```
 
-6. **部署**
+7. **部署**
    ```bash
    npm run deploy
    ```
+
+8. **配置 R2 生命周期规则**（可选但推荐）
+   - 进入 Cloudflare Dashboard → R2 → simplepaste-files → Settings
+   - 添加 Object lifecycle rule：Delete objects after 30 days
+   - 这将自动清理过期文件，节省存储空间
 
 ## 💻 本地开发
 
@@ -106,7 +117,8 @@ SimplePaste/
 │   ├── index.ts          # Worker 入口，路由处理
 │   ├── types.ts          # TypeScript 类型定义
 │   ├── api/
-│   │   ├── paste.ts      # 分享相关 API
+│   │   ├── paste.ts      # 文本分享 API
+│   │   ├── file.ts       # 文件分享 API（R2 存储）
 │   │   ├── admin.ts      # 管理相关 API
 │   │   └── utils.ts      # 工具函数
 │   └── pages/
@@ -122,14 +134,22 @@ SimplePaste/
 
 ## 📡 API 接口
 
-### 公开接口
+### 文本分享接口
 
 | 方法 | 端点 | 功能 |
 |------|------|------|
-| `POST` | `/api/paste` | 创建分享 |
-| `GET` | `/api/paste/:id` | 获取分享（需密码验证） |
+| `POST` | `/api/paste` | 创建文本分享 |
+| `GET` | `/api/paste/:id` | 获取文本（需密码验证） |
 | `GET` | `/api/paste/:id/raw` | 获取原始文本 |
 | `GET` | `/api/paste/:id/exists` | 检查分享是否存在 |
+
+### 文件分享接口
+
+| 方法 | 端点 | 功能 |
+|------|------|------|
+| `POST` | `/api/file` | 上传文件（FormData） |
+| `GET` | `/api/file/:id` | 下载文件（需密码验证） |
+| `GET` | `/api/file/:id/info` | 获取文件信息 |
 
 ### 管理接口（需认证）
 
@@ -137,7 +157,7 @@ SimplePaste/
 |------|------|------|
 | `POST` | `/api/admin/login` | 管理员登录 |
 | `GET` | `/api/admin/list` | 获取分享列表 |
-| `DELETE` | `/api/admin/paste/:id` | 删除指定分享 |
+| `DELETE` | `/api/admin/paste/:id` | 删除指定分享（含文件） |
 
 ## 🔒 安全说明
 
@@ -154,6 +174,9 @@ SimplePaste/
 | KV 读取 | 100,000 次/天 | 每次访问分享 |
 | KV 写入 | 1,000 次/天 | 每次创建分享 |
 | KV 存储 | 1 GB | 可存储大量文本 |
+| R2 存储 | 10 GB | 文件存储空间 |
+| R2 A 类操作 | 1,000,000 次/月 | 上传、列表等 |
+| R2 B 类操作 | 10,000,000 次/月 | 下载 |
 
 ## 🌐 自定义域名
 
@@ -164,6 +187,14 @@ SimplePaste/
 3. API Token 有足够的权限
 
 ## 📝 更新日志
+
+### v1.1.0
+
+- ✅ 新增文件分享功能（最大 25MB）
+- ✅ 使用 Cloudflare R2 存储文件
+- ✅ 文件支持密码保护和阅后即焚
+- ✅ 管理后台支持文件类型显示和删除
+- ✅ R2 生命周期规则自动清理过期文件
 
 ### v1.0.0
 
@@ -181,4 +212,5 @@ MIT License
 ## 🙏 致谢
 
 - [Cloudflare Workers](https://workers.cloudflare.com/) - Serverless 平台
+- [Cloudflare R2](https://developers.cloudflare.com/r2/) - 对象存储
 - 基于 [CloudPaste](https://github.com/YOUR_USERNAME/CloudPaste) 项目简化而来

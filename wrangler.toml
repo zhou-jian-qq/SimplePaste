@@ -9,6 +9,12 @@ compatibility_date = "2024-01-01"
 binding = "PASTE_KV"
 id = "your-kv-namespace-id"  # 部署时替换为实际的 KV namespace ID
 
+# R2 存储桶绑定
+# 部署前需要创建 R2 存储桶：npx wrangler r2 bucket create simplepaste-files
+[[r2_buckets]]
+binding = "FILE_BUCKET"
+bucket_name = "simplepaste-files"  # R2 存储桶名称
+
 # 环境变量
 [vars]
 # 管理密码通过 secret 设置：npx wrangler secret put ADMIN_PASSWORD

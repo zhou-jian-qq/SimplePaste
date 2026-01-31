@@ -1,5 +1,5 @@
 export function getAdminPage(): string {
-  return `<!DOCTYPE html>
+    return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">

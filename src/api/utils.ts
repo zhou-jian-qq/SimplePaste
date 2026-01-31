@@ -9,8 +9,9 @@ function getTodayString(): string {
   return `${year}-${month}-${day}`;
 }
 
-// 生成随机 ID（6 位数字：前3位顺序码 + 后3位随机码）
+// 生成随机 ID（6 位数字：前2位日期 + 中间3位流水号 + 最后1位随机数字）
 export async function generateId(env: Env): Promise<string> {
+  const now = new Date();
   const today = getTodayString();
   const counterKey = `id_counter:${today}`;
   
@@ -36,18 +37,19 @@ export async function generateId(env: Env): Promise<string> {
     date: today 
   }), { expirationTtl: 86400 }); // 24小时后过期
   
-  // 生成后3位随机码（000-999）
-  const randomValues = new Uint8Array(3);
-  crypto.getRandomValues(randomValues);
-  const randomPart = String(
-    (randomValues[0] % 10) * 100 + 
-    (randomValues[1] % 10) * 10 + 
-    (randomValues[2] % 10)
-  ).padStart(3, '0');
+  // 前2位：当前日期（01-31）
+  const dayPart = String(now.getDate()).padStart(2, '0');
   
-  // 前3位顺序码 + 后3位随机码
+  // 中间3位：流水号（001-999）
   const sequencePart = String(sequence).padStart(3, '0');
-  return sequencePart + randomPart;
+  
+  // 最后1位：随机数字（0-9）
+  const randomValues = new Uint8Array(1);
+  crypto.getRandomValues(randomValues);
+  const randomDigit = String(randomValues[0] % 10);
+  
+  // 组合：日期(2位) + 流水号(3位) + 随机数字(1位)
+  return dayPart + sequencePart + randomDigit;
 }
 
 // SHA-256 哈希

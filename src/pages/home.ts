@@ -396,6 +396,7 @@ export function getHomePage(): string {
             maxlength="6"
             pattern="[0-9]*"
             inputmode="numeric"
+            autocomplete="off"
           />
           <button type="button" class="btn lookup-btn" onclick="goToShare()">查看</button>
         </div>
